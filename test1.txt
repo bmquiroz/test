@@ -1,0 +1,76 @@
+ARG  BASE_IMAGE_REGISTRY
+ARG  BASE_IMAGE_NAME
+ARG  BASE_IMAGE_TAG
+
+FROM ${BASE_IMAGE_REGISTRY}/${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}
+
+#ARG BASE_IMAGE
+#ARG IMAGE_VERSION
+
+#FROM ${BASE_IMAGE}:${IMAGE_VERSION}
+
+ARG VALIDATION_REST_ARTIFACT_NAME=cmsffm-validation-application
+ARG VALIDATION_REST_ARTIFACT_VERSION_RELEASE
+
+ARG APP_USER=validation
+ARG APP_GROUP=validation
+ARG INSTALL_DIR=/opt/cms/apps/validation-application
+ARG LOG_DIR=/opt/cms/logs/validation-application/privacy_logs
+ARG JAVA_TMP=/opt/cms/apps/javatmp
+
+USER root
+
+COPY validation-rest/build/distributions/${VALIDATION_REST_ARTIFACT_NAME}-${VALIDATION_REST_ARTIFACT_VERSION_RELEASE}*.rpm /tmp
+
+RUN groupadd -g 6200 ${APP_GROUP} && \
+    useradd -rm -d ${INSTALL_DIR} -s /bin/bash -g ${APP_GROUP} -u 6200 ${APP_USER} && \
+    mkdir -p ${LOG_DIR} && chown ${APP_USER}:${APP_GROUP} ${LOG_DIR} && \
+    mkdir ${JAVA_TMP} && chown ${APP_USER}:${APP_GROUP} ${JAVA_TMP} && \
+    yum localinstall -y --disablerepo=* /tmp/${VALIDATION_REST_ARTIFACT_NAME}-${VALIDATION_REST_ARTIFACT_VERSION_RELEASE}* && \
+    yum versionlock add ${VALIDATION_REST_ARTIFACT_NAME}-${VALIDATION_REST_ARTIFACT_VERSION_RELEASE}* && \
+    yum localinstall -y --disablerepo=* /tmp/${VALIDATION_REF_DATA_ARTIFACT_NAME}-${VALIDATION_REF_DATA_ARTIFACT_VERSION_RELEASE}* && \
+    yum versionlock add ${VALIDATION_REF_DATA_ARTIFACT_NAME}-${VALIDATION_REF_DATA_ARTIFACT_VERSION_RELEASE}* && \
+    rm -rf /tmp/${VALIDATION_REST_ARTIFACT_NAME}* /tmp/${VALIDATION_REF_DATA_ARTIFACT_NAME}* && \
+    yum clean all && \
+[ ! -d /var/cache/yum ] || rm -rf /var/cache/yum
+#RUN yum -q list installed "${VALIDATION_REST_ARTIFACT_NAME}-${VALIDATION_REST_ARTIFACT_VERSION_RELEASE}*" &>/dev/null && echo "Application Package is installed" || (echo "Application Package is NOT installed please verify" && exit 1)
+COPY validation-config/start.sh ${INSTALL_DIR}/bin/start.sh
+#COPY validation-config/stop.sh ${INSTALL_DIR}/bin/stop.sh
+#COPY validation-config/replay ${TIVOLI_DIR}/replay
+# COPY bpc-config/env.properties ${INSTALL_DIR}/conf/env/env.properties
+# COPY validation-config/logback.properties ${INSTALL_DIR}/conf/env/logback.properties
+# COPY validation-config/jasypt.properties ${INSTALL_DIR}/conf/env/jasypt.properties
+# COPY validation-config/encryption.properties ${INSTALL_DIR}/conf/env/encryption.properties
+#COPY validation-config/validation-application.service /etc/systemd/system/validation-application.service
+
+#Changing so the install directory is apart of the root group for OpenShift
+RUN chgrp -R 0 ${INSTALL_DIR} && \
+    chmod -R g+rwx ${INSTALL_DIR} && \
+    #Settting JAVA_TMP apart of the root group
+    chgrp -R 0 ${JAVA_TMP} && \
+    chmod -R g+rwx ${JAVA_TMP} && \
+    #Setting LOG_DIR apart of the root group
+    chgrp -R 0 ${LOG_DIR} && \
+    chmod -R g+rwx ${LOG_DIR}
+RUN ls -rlt ${INSTALL_DIR}/bin/start.sh
+#    chown -R ${APP_USER}:${APP_GROUP} /etc/systemd/system/validation-application.service && \    
+#    chmod 0777 ${INSTALL_DIR}/bin/start.sh && \
+#    chmod 0754 ${INSTALL_DIR}/bin/stop.sh && \
+#    chmod 0777 ${INSTALL_DIR}/bin/validation-application && \
+#    chmod 0750 ${TIVOLI_DIR}/replay
+#     chmod 0640 ${INSTALL_DIR}/conf/env/env.properties && \
+#     chmod 0640 ${INSTALL_DIR}/conf/env/logback.properties && \
+#     chmod 0400 ${INSTALL_DIR}/conf/env/jasypt.properties && \
+#     chmod 0400 ${INSTALL_DIR}/conf/env/encryption.properties && \
+#    chmod 0755 /etc/systemd/system/validation-application.service
+
+EXPOSE 8080 
+
+WORKDIR ${INSTALL_DIR}
+ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV JAVA_HOME /opt/cms/jdk8
+
+#CMD ["/bin/bash"]
+#CMD sytemctl validation-application start
+
+ENTRYPOINT /opt/cms/apps/validation-app/bin/start.sh
